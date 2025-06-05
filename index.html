@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>3판 2선승 총격전</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body, html { width: 100%; height: 100%; background: #111; overflow: hidden; }
+    #game {
+      width: 100%;
+      height: 100%;
+      background: #222;
+      position: relative;
+    }
+    .player {
+      width: 50px;
+      height: 50px;
+      position: absolute;
+      background: blue;
+    }
+    #player1 { background: dodgerblue; }
+    #player2 { background: crimson; }
+    .bullet {
+      width: 10px;
+      height: 5px;
+      background: yellow;
+      position: absolute;
+    }
+    .wall {
+      position: absolute;
+      background: #555;
+    }
+    #status {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      font-family: sans-serif;
+      font-size: 20px;
+    }
+    /* 스킬 게이지 스타일 */
+    .skill-gauge {
+      position: absolute;
+      width: 100px;
+      height: 10px;
+      background: #444;
+      border-radius: 5px;
+      overflow: hidden;
+      top: -20px;
+      left: 0;
+    }
+    .skill-fill {
+      height: 100%;
+      background: limegreen;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .skill-ready {
+      border: 2px solid gold;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="player1" class="player">
+      <div class="skill-gauge"><div class="skill-fill" id="p1-gauge"></div></div>
+    </div>
+    <div id="player2" class="player">
+      <div class="skill-gauge"><div class="skill-fill" id="p2-gauge"></div></div>
+    </div>
+    <div id="status">라운드 1 | P1: 0승 | P2: 0승</div>
+  </div>
+
+  <script>
+    const game = document.getElementById('game');
+    const player1 = document.getElementById('player1');
+    const player2 = document.getElementById('player2');
+    const statusText = document.getElementById('status');
+    const p1GaugeFill = document.getElementById('p1-gauge');
+    const p2GaugeFill = document.getElementById('p2-gauge');
+
+    let p1 = { x: 100, y: 300, score: 0, skillGauge: 0 };
+    let p2 = { x: window.innerWidth - 150, y: 300, score: 0, skillGauge: 0 };
+    let keys = {};
+    let round = 1;
+    let playing = true;
+
+    const speed = 5;
+    const SKILL_THRESHOLD = 100; // 스킬 게이지 최대치
+    const SKILL_CHARGE = 30;     // 적중 시 게이지 충전량
+
+    function drawPlayers() {
+      player1.style.left = p1.x + 'px';
+      player1.style.top = p1.y + 'px';
+      player2.style.left = p2.x + 'px';
+      player2.style.top = p2.y + 'px';
+    }
+
+    function updateStatus() {
+      statusText.textContent = `라운드 ${round} | P1: ${p1.score}승 | P2: ${p2.score}승`;
+    }
+
+    function updateSkillGauge() {
+      p1GaugeFill.style.width = p1.skillGauge + '%';
+      p2GaugeFill.style.width = p2.skillGauge + '%';
+
+      p1GaugeFill.parentElement.classList.toggle('skill-ready', p1.skillGauge >= SKILL_THRESHOLD);
+      p2GaugeFill.parentElement.classList.toggle('skill-ready', p2.skillGauge >= SKILL_THRESHOLD);
+    }
+
+    document.addEventListener('keydown', e => {
+      keys[e.key] = true;
+
+      // P1 스킬 발동: Shift
+      if (e.key === 'Shift' && playing) {
+        useSkill(p1, 'p1');
+      }
+      // P2 스킬 발동: Backspace (뒤로가기 방지)
+      if (e.key === 'Backspace' && playing) {
+        e.preventDefault();
+        useSkill(p2, 'p2');
+      }
+    });
+    document.addEventListener('keyup', e => keys[e.key] = false);
+
+    function shoot(player, direction, owner) {
+      const bullet = document.createElement('div');
+      bullet.className = 'bullet';
+      bullet.style.left = player.x + (owner === 'p1' ? 50 : -10) + 'px';
+      bullet.style.top = player.y + 25 + 'px';
+      game.appendChild(bullet);
+
+      const interval = setInterval(() => {
+        bullet.style.left = bullet.offsetLeft + direction * 10 + 'px';
+        const bRect = bullet.getBoundingClientRect();
+        const target = owner === 'p1' ? player2.getBoundingClientRect() : player1.getBoundingClientRect();
+
+        if (bRect.left < 0 || bRect.right > window.innerWidth) {
+          clearInterval(interval);
+          bullet.remove();
+        } else if (!(bRect.right < target.left || bRect.left > target.right || bRect.bottom < target.top || bRect.top > target.bottom)) {
+          bullet.remove();
+          clearInterval(interval);
+          chargeSkillGauge(owner);
+          endRound(owner);
+        }
+      }, 16);
+    }
+
+    // 스킬 총알 발사 (크고 빠름)
+    function useSkill(player, owner) {
+      if ((owner === 'p1' && p1.skillGauge < SKILL_THRESHOLD) ||
+          (owner === 'p2' && p2.skillGauge < SKILL_THRESHOLD)) {
+        return; // 스킬 게이지 부족
+      }
+
+      if (owner === 'p1') p1.skillGauge = 0;
+      else p2.skillGauge = 0;
+      updateSkillGauge();
+
+      const bullet = document.createElement('div');
+      bullet.className = 'bullet';
+      bullet.style.background = 'gold';
+      bullet.style.width = '20px';
+      bullet.style.height = '10px';
+      bullet.style.left = player.x + (owner === 'p1' ? 50 : -20) + 'px';
+      bullet.style.top = player.y + 20 + 'px';
+      game.appendChild(bullet);
+
+      const speed = 20;
+      const direction = owner === 'p1' ? 1 : -1;
+
+      const interval = setInterval(() => {
+        bullet.style.left = bullet.offsetLeft + direction * speed + 'px';
+        const bRect = bullet.getBoundingClientRect();
+        const target = owner === 'p1' ? player2.getBoundingClientRect() : player1.getBoundingClientRect();
+
+        if (bRect.left < 0 || bRect.right > window.innerWidth) {
+          clearInterval(interval);
+          bullet.remove();
+        } else if (!(bRect.right < target.left || bRect.left > target.right || bRect.bottom < target.top || bRect.top > target.bottom)) {
+          bullet.remove();
+          clearInterval(interval);
+          endRound(owner);
+        }
+      }, 16);
+    }
+
+    function chargeSkillGauge(winner) {
+      if (winner === 'p1') {
+        p1.skillGauge = Math.min(SKILL_THRESHOLD, p1.skillGauge + SKILL_CHARGE);
+      } else {
+        p2.skillGauge = Math.min(SKILL_THRESHOLD, p2.skillGauge + SKILL_CHARGE);
+      }
+      updateSkillGauge();
+    }
+
+    function endRound(winner) {
+      playing = false;
+      if (winner === 'p1') {
+        p1.score++;
+      } else {
+        p2.score++;
+      }
+
+      if (p1.score === 2 || p2.score === 2) {
+        statusText.textContent = `${winner.toUpperCase()} 승리! 게임 종료`;
+      } else {
+        round++;
+        updateStatus();
+        resetPositions();
+        setTimeout(() => playing = true, 1000);
+      }
+    }
+
+    function resetPositions() {
+      p1.x = 100; p1.y = 300;
+      p2.x = window.innerWidth - 150; p2.y = 300;
+      drawPlayers();
+    }
+
+    function gameLoop() {
+      if (playing) {
+        if (keys['w']) p1.y -= speed;
+        if (keys['s']) p1.y += speed;
+        if (keys['a']) p1.x -= speed;
+        if (keys['d']) p1.x += speed;
+        if (keys[' ']) { shoot(p1, 1, 'p1'); keys[' '] = false; }
+
+        if (keys['ArrowUp']) p2.y -= speed;
+        if (keys['ArrowDown']) p2.y += speed;
+        if (keys['ArrowLeft']) p2.x -= speed;
+        if (keys['ArrowRight']) p2.x += speed;
+        if (keys['Enter']) { shoot(p2, -1, 'p2'); keys['Enter'] = false; }
+
+        // 화면 경계 제한
+        p1.x = Math.max(0, Math.min(window.innerWidth - 50, p1.x));
+        p1.y = Math.max(0, Math.min(window.innerHeight - 50, p1.y));
+        p2.x = Math.max(0, Math.min(window.innerWidth - 50, p2.x));
+        p2.y = Math.max(0, Math.min(window.innerHeight - 50, p2.y));
+
+        drawPlayers();
+      }
+      requestAnimationFrame(gameLoop);
+    }
+
+    updateStatus();
+    drawPlayers();
+    updateSkillGauge();
+    gameLoop();
+  </script>
+</body>
+</html>
